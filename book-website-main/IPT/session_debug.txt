@@ -1,0 +1,7 @@
+Array
+(
+    [user_id] => 6
+    [email] => berinoglenn50@gmail.com
+    [role] => admin
+    [name] => glenn
+)
