@@ -1,30 +1,87 @@
 <?php
 session_start();
-$conn = new mysqli("localhost", "root", "", "bookwebsite");
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+
+// Database configuration - should be in a separate config file
+$db_config = [
+    'host' => 'localhost',
+    'username' => 'root',
+    'password' => '',
+    'database' => 'bookwebsite'
+];
+
+// Create database connection with error handling
+try {
+    $conn = new mysqli($db_config['host'], $db_config['username'], $db_config['password'], $db_config['database']);
+    $conn->set_charset("utf8mb4");
+    
+    if ($conn->connect_error) {
+        throw new Exception("Connection failed: " . $conn->connect_error);
+    }
+} catch (Exception $e) {
+    error_log("Database connection error: " . $e->getMessage());
+    die("Sorry, we're experiencing technical difficulties. Please try again later.");
 }
 
-// Fetch all books
+// Initialize variables
 $books = [];
-$result = $conn->query("SELECT * FROM books");
-if ($result) {
+$username = '';
+$profile_pic = 'profile.jpg'; // default image
+$user_role = 'user';
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// Fetch all books using prepared statement
+try {
+    $stmt = $conn->prepare("SELECT id, title, author, cover FROM books ORDER BY title ASC");
+    if (!$stmt) {
+        throw new Exception("Prepare failed: " . $conn->error);
+    }
+    
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
     while ($row = $result->fetch_assoc()) {
         $books[] = $row;
     }
+    $stmt->close();
+} catch (Exception $e) {
+    error_log("Error fetching books: " . $e->getMessage());
+    $books = []; // Fallback to empty array
 }
 
-// Fetch user data from users table
-$username = '';
-$profile_pic = 'profile.jpg'; // default image
-if (isset($_SESSION['user_id'])) {
+// Fetch user data using prepared statement
+try {
     $uid = intval($_SESSION['user_id']);
-    $res = $conn->query("SELECT username, profile_pic FROM users WHERE id=$uid");
-    if ($row = $res->fetch_assoc()) {
-        $username = $row['username'];
-        // Use the profile pic from database if it exists, otherwise use default
-        $profile_pic = !empty($row['profile_pic']) ? $row['profile_pic'] : 'profile.jpg';
+    $stmt = $conn->prepare("SELECT username, profile_pic, role FROM users WHERE id = ?");
+    if (!$stmt) {
+        throw new Exception("Prepare failed: " . $conn->error);
     }
+    
+    $stmt->bind_param("i", $uid);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($row = $result->fetch_assoc()) {
+        $username = $row['username'];
+        $profile_pic = !empty($row['profile_pic']) ? $row['profile_pic'] : 'profile.jpg';
+        $user_role = $row['role'] ?? 'user';
+        $_SESSION['role'] = $user_role; // Update session with current role
+    }
+    $stmt->close();
+} catch (Exception $e) {
+    error_log("Error fetching user data: " . $e->getMessage());
+    // Keep default values
+}
+
+$conn->close();
+
+// Security function to sanitize output
+function sanitize_output($string) {
+    return htmlspecialchars($string, ENT_QUOTES, 'UTF-8');
 }
 ?>
 <!DOCTYPE html>
@@ -33,6 +90,7 @@ if (isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Library - Personal Book Website</title>
+    <meta name="description" content="Browse our collection of books in the personal library">
     <link rel="stylesheet" href="haha.css">
     <style>
         * {
@@ -377,6 +435,15 @@ if (isset($_SESSION['user_id'])) {
             border: 2px dashed #ddd;
         }
 
+        .error-msg {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #f5c6cb;
+            margin-bottom: 1rem;
+        }
+
         /* Responsive Design */
         @media (max-width: 1024px) {
             .container {
@@ -460,21 +527,42 @@ if (isset($_SESSION['user_id'])) {
         html {
             scroll-behavior: smooth;
         }
+
+        /* Accessibility improvements */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        /* Focus styles for keyboard navigation */
+        .nav-btn:focus,
+        .back-home-btn:focus,
+        .book-card a:focus {
+            outline: 2px solid #9c6b3e;
+            outline-offset: 2px;
+        }
     </style>
 </head>
 <body>
     <header class="header">
         <div class="logo-bar">
             <div class="logo-left">
-                <img src="book.png" alt="Logo" class="logo-img">
+                <img src="book.png" alt="Personal Book Website Logo" class="logo-img">
                 <h1>Personal Book Website</h1>
             </div>
             <div style="display: flex; align-items: center;">
                 <div class="topuser">
                     <strong>
-                        <?php echo $username ? htmlspecialchars($username) : 'Set your username'; ?>
+                        <?php echo $username ? sanitize_output($username) : 'Set your username'; ?>
                     </strong>
-                    <img src="<?php echo htmlspecialchars($profile_pic); ?>" alt="User Icon" class="user-small-img">
+                    <img src="<?php echo sanitize_output($profile_pic); ?>" alt="User Profile Picture" class="user-small-img">
                 </div>
                 <a href="1.php" class="back-home-btn">Back to Home</a>
             </div>
@@ -484,28 +572,31 @@ if (isset($_SESSION['user_id'])) {
     <div class="container">
         <aside class="sidebar">
             <div class="profile-section">
-                <img src="<?php echo htmlspecialchars($profile_pic); ?>" alt="User Icon" class="user-img">
+                <img src="<?php echo sanitize_output($profile_pic); ?>" alt="User Profile Picture" class="user-img">
                 <p>
-                    <strong><?php echo htmlspecialchars($username); ?></strong>
+                    <strong><?php echo sanitize_output($username); ?></strong>
                     <span>
-                        <?php echo isset($_SESSION['role']) ? ucfirst(htmlspecialchars($_SESSION['role'])) : 'User'; ?>
+                        <?php echo sanitize_output(ucfirst($user_role)); ?>
                     </span>
                 </p>
             </div>
             
-            <div class="nav-buttons">
+            <nav class="nav-buttons" aria-label="User navigation">
                 <a href="user_profile.php" class="nav-btn">User Profile</a>
-                <a href="library.php" class="nav-btn active">Library</a>
+                <a href="library.php" class="nav-btn active" aria-current="page">Library</a>
                 <a href="settings.php" class="nav-btn">Settings</a>
                 
-                <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                <?php if ($user_role === 'admin'): ?>
                     <a href="admin_panel.php" class="nav-btn admin-btn">Admin Panel</a>
                 <?php endif; ?>
                 
                 <form method="post" action="logout.php" style="margin-top: 1rem;">
-                    <button type="submit" class="nav-btn logout-btn" name="logoutBtn">Log Out</button>
+                    <button type="submit" class="nav-btn logout-btn" name="logoutBtn">
+                        Log Out
+                        <span class="sr-only">from Personal Book Website</span>
+                    </button>
                 </form>
-            </div>
+            </nav>
         </aside>
 
         <main class="main-content">
@@ -517,22 +608,22 @@ if (isset($_SESSION['user_id'])) {
                 <?php if (empty($books)): ?>
                     <div class="empty-msg">
                         <p>No books available in the library yet.</p>
-                        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                        <?php if ($user_role === 'admin'): ?>
                             <p><a href="admin_panel.php" style="color: #9c6b3e; text-decoration: none; font-weight: 600;">Add some books to get started!</a></p>
                         <?php endif; ?>
                     </div>
                 <?php else: ?>
                     <div class="book-cards">
                         <?php foreach ($books as $book): ?>
-                            <div class="book-card">
-                                <a href="book.php?id=<?php echo $book['id']; ?>">
-                                    <img src="<?php echo htmlspecialchars($book['cover']); ?>" 
-                                         alt="<?php echo htmlspecialchars($book['title']); ?> Cover"
-                                         onerror="this.src='placeholder-book.jpg'">
-                                    <strong><?php echo htmlspecialchars($book['title']); ?></strong>
-                                    <p>by <?php echo htmlspecialchars($book['author']); ?></p>
+                            <article class="book-card">
+                                <a href="book.php?id=<?php echo intval($book['id']); ?>" aria-label="View details for <?php echo sanitize_output($book['title']); ?>">
+                                    <img src="<?php echo sanitize_output($book['cover']); ?>" 
+                                         alt="Cover of <?php echo sanitize_output($book['title']); ?>"
+                                         onerror="this.src='placeholder-book.jpg'; this.alt='Book cover not available';">
+                                    <strong><?php echo sanitize_output($book['title']); ?></strong>
+                                    <p>by <?php echo sanitize_output($book['author']); ?></p>
                                 </a>
-                            </div>
+                            </article>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
@@ -565,13 +656,13 @@ if (isset($_SESSION['user_id'])) {
                         document.body.classList.add('fade-out');
                         
                         setTimeout(function() {
-                            window.location = link.href;
+                            window.location.href = link.href;
                         }, 300);
                     });
                 }
             });
 
-            // Handle form submissions for smooth transitions
+            // Handle form submissions for smooth transitions (except logout)
             document.querySelectorAll('form').forEach(function(form) {
                 // Skip logout form to prevent issues
                 if (form.querySelector('[name="logoutBtn"]')) return;
@@ -589,12 +680,33 @@ if (isset($_SESSION['user_id'])) {
 
         // Add loading state to buttons
         document.querySelectorAll('button[type="submit"]').forEach(button => {
-            button.addEventListener('click', function() {
+            button.addEventListener('click', function(e) {
+                // Prevent double submission
+                if (this.disabled) {
+                    e.preventDefault();
+                    return;
+                }
+                
                 if (!this.querySelector('.loading')) {
                     this.innerHTML += ' <span class="loading"></span>';
                     this.disabled = true;
+                    
+                    // Re-enable button after 5 seconds as fallback
+                    setTimeout(() => {
+                        this.disabled = false;
+                        const loading = this.querySelector('.loading');
+                        if (loading) loading.remove();
+                    }, 5000);
                 }
             });
         });
 
-    
+        // Error handling for images
+        document.querySelectorAll('img').forEach(img => {
+            img.addEventListener('error', function() {
+                console.warn('Failed to load image:', this.src);
+            });
+        });
+    </script>
+</body>
+</html>

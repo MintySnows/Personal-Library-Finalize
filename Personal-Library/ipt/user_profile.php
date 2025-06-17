@@ -2,13 +2,16 @@
 session_start();
 $conn = new mysqli("localhost", "root", "", "bookwebsite");
 
-// Fetch user info
+// Fetch user info including profile picture
 $user = null;
+$profile_pic = 'profile.jpg'; // Default profile picture
 if (isset($_SESSION['user_id'])) {
     $uid = intval($_SESSION['user_id']);
-    $res = $conn->query("SELECT username, email FROM users WHERE id=$uid");
+    $res = $conn->query("SELECT username, email, profile_pic FROM users WHERE id=$uid");
     if ($row = $res->fetch_assoc()) {
         $user = $row;
+        // Use the profile pic from database if it exists, otherwise use default
+        $profile_pic = !empty($row['profile_pic']) ? $row['profile_pic'] : 'profile.jpg';
     }
 }
 ?>
@@ -22,9 +25,61 @@ if (isset($_SESSION['user_id'])) {
   <style>
     body {
       transition: opacity 0.5s;
+      background: #fff8ef;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
     }
     body.fade-out {
       opacity: 0;
+    }
+    .header {
+      background: #ffe7b3;
+      box-shadow: 0 2px 12px #e0c9a6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 80px;
+      padding: 0;
+    }
+    .logo-bar {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      justify-content: space-between;
+      padding: 0 40px;
+    }
+    .logo-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-img {
+      height: 48px;
+    }
+    .logo-bar h1 {
+      font-size: 1.6rem;
+      color: #444;
+      font-family: inherit;
+      font-weight: 700;
+      margin: 0;
+    }
+    .topuser {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: bold;
+      color: #9c6b3e;
+    }
+    .topuser strong {
+      font-size: 1.08rem;
+      color: #222;
+    }
+    .user-small-img {
+      height: 32px;
+      width: 32px;
+      border-radius: 50%;
+      object-fit: cover;
     }
     .container {
       display: flex;
@@ -101,6 +156,31 @@ if (isset($_SESSION['user_id'])) {
       background: #f5c748;
       color: #7b522e;
     }
+    .admin-btn {
+      width: 90%;
+      height: 48px;
+      margin: 0 auto 18px auto;
+      background: #9c6b3e;
+      color: #fff;
+      border: none;
+      border-radius: 22px;
+      font-size: 1.08rem;
+      font-family: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      letter-spacing: 0.2px;
+      transition: background 0.2s, color 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+    .admin-btn:hover,
+    .admin-btn:focus {
+      background: #7b522e;
+      color: #fff;
+    }
     .logout {
       width: 90%;
       height: 40px;
@@ -161,6 +241,33 @@ if (isset($_SESSION['user_id'])) {
     .user-profile-tag a:hover {
       color: #7b522e;
     }
+    .recent-book {
+      background: #fff7e6;
+      border-radius: 12px;
+      padding: 12px 18px;
+      width: 180px;
+      text-align: center;
+      box-shadow: 0 2px 8px #0001;
+      transition: transform 0.2s;
+    }
+    .recent-book:hover {
+      transform: translateY(-5px);
+    }
+    .recent-book img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin-bottom: 10px;
+    }
+    .recent-book-title {
+      font-weight: bold;
+      color: #222;
+    }
+    .recent-book-author {
+      font-size: 0.95em;
+      color: #7b522e;
+    }
   </style>
 </head>
 <body>
@@ -176,14 +283,14 @@ if (isset($_SESSION['user_id'])) {
             <?php echo $user ? htmlspecialchars($user['username']) : "Guest"; ?>
           </strong>
         </span>
-        <img src="github_logo.png" alt="User Icon" class="user-small-img" />
+        <img src="<?php echo htmlspecialchars($profile_pic); ?>" alt="User Icon" class="user-small-img" />
       </div>
     </div>
   </header>
   <div class="container">
     <aside class="sidebar">
       <div class="profile-section">
-        <img src="profile.jpg" alt="User Icon" class="user-img" />
+        <img src="<?php echo htmlspecialchars($profile_pic); ?>" alt="User Icon" class="user-img" />
         <p>
           <strong><?php echo $user ? htmlspecialchars($user['username']) : "Guest"; ?></strong>
           <br>
@@ -192,6 +299,7 @@ if (isset($_SESSION['user_id'])) {
           </span>
         </p>
       </div>
+      
       <div class="nav-buttons">
         <div class="main-buttons">
           <form method="get" action="user_profile.php">
@@ -251,15 +359,14 @@ if (isset($_SESSION['user_id'])) {
               }
               if (count($recentBooks) > 0):
                 foreach ($recentBooks as $book): ?>
-                  <div style="background:#fff7e6;border-radius:12px;padding:12px 18px;width:180px;text-align:center;box-shadow:0 2px 8px #0001;">
+                  <div class="recent-book">
                     <a href="book.php?id=<?php echo urlencode($book['id']); ?>" style="display:block;text-decoration:none;">
                       <img 
                         src="<?php echo htmlspecialchars($book['cover']); ?>" 
                         alt="Book Cover" 
-                        style="width:100%;height:220px;object-fit:cover;border-radius:12px;margin-bottom:10px;"
                       >
-                      <div style="font-weight:bold;color:#222;"><?php echo htmlspecialchars($book['title']); ?></div>
-                      <div style="font-size:0.95em;color:#7b522e;"><?php echo htmlspecialchars($book['author']); ?></div>
+                      <div class="recent-book-title"><?php echo htmlspecialchars($book['title']); ?></div>
+                      <div class="recent-book-author"><?php echo htmlspecialchars($book['author']); ?></div>
                     </a>
                   </div>
                 <?php endforeach;

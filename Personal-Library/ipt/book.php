@@ -12,19 +12,6 @@ if (isset($_SESSION['user_id']) && $book_id > 0) {
     $conn->query("INSERT INTO recently_read (user_id, book_id, read_at) VALUES ($user_id, $book_id, NOW())");
 }
 
-// Handle favorite actions
-if (isset($_POST['favorite_book_id']) && isset($_SESSION['id'])) {
-    $userId = intval($_SESSION['id']);
-    $favBookId = intval($_POST['favorite_book_id']);
-    $conn->query("INSERT IGNORE INTO favorites (user_id, book_id) VALUES ($userId, $favBookId)");
-}
-
-if (isset($_POST['unfavorite_book_id']) && isset($_SESSION['id'])) {
-    $userId = intval($_SESSION['id']);
-    $unfavBookId = intval($_POST['unfavorite_book_id']);
-    $conn->query("DELETE FROM favorites WHERE user_id=$userId AND book_id=$unfavBookId");
-}
-
 // Get book details
 $result = $conn->query("SELECT * FROM books WHERE id=$book_id");
 $book = $result->fetch_assoc();
@@ -583,26 +570,8 @@ if (isset($_SESSION['id'])) {
                         <button onclick="toggleFullBook()" class="read-full-btn" id="readFullBtn" aria-expanded="false" aria-controls="fullBookContent">
                             📚 Read Full Book
                         </button>
-                        
-                        <?php if (isset($_SESSION['id'])): ?>
-                            <form method="post" action="book.php?id=<?php echo $book['id']; ?>" style="display:inline;">
-                                <?php if ($isFavorite): ?>
-                                    <input type="hidden" name="unfavorite_book_id" value="<?php echo $book['id']; ?>">
-                                    <button type="submit" class="favorite-btn" title="Remove from Favorites" aria-pressed="true">
-                                        ❤️ Remove from Favorites
-                                    </button>
-                                <?php else: ?>
-                                    <input type="hidden" name="favorite_book_id" value="<?php echo $book['id']; ?>">
-                                    <button type="submit" class="favorite-btn" title="Add to Favorites" aria-pressed="false">
-                                        🤍 Add to Favorites
-                                    </button>
-                                <?php endif; ?>
+            
                             </form>
-                        <?php else: ?>
-                            <a href="login.php" class="favorite-btn" aria-label="Login to add to favorites">
-                                🔐 Login to add to favorites
-                            </a>
-                        <?php endif; ?>
                     </div>
                 </div>
             </div>
